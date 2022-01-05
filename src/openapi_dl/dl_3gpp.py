@@ -3,8 +3,8 @@
 The 3GPP pluging for OpenAPI downloader
 """
 import logging, sys
-from scraper_3gpp import SpecList
-from dl_general import OpenAPIDownloader
+from openapi_dl.scraper_3gpp import SpecList
+from openapi_dl.dl_general import OpenAPIDownloader
 import shutil
 from pathlib import Path
 

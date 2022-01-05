@@ -2,15 +2,15 @@
 """
 OpenAPI downloader
 
-Recursively download the OpenAPI specification and it's dependency.
-Plugable with multiple downloader (e.g. 3GPP).
+Recursively download the OpenAPI specification and its dependency.
+This project is able to plug multiple downloaders (e.g. 3GPP). 
 """
 import logging, sys
 import os
 import argparse
 from pathlib import Path
-from dl_general import OpenAPIDownloader
-import dl_3gpp
+from openapi_dl.dl_general import OpenAPIDownloader
+from openapi_dl import dl_3gpp
 import yaml
 try:
     from yaml import CLoader as Loader, CDumper as Dumper
