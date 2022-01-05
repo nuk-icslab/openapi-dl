@@ -1,0 +1,4 @@
+shutil
+beautifulsoup4
+urllib3
+pyyaml

@@ -1,0 +1,147 @@
+#!/usr/bin/python3
+"""
+OpenAPI downloader
+
+Recursively download the OpenAPI specification and it's dependency.
+Plugable with multiple downloader (e.g. 3GPP).
+"""
+import logging, sys
+import os
+import argparse
+from pathlib import Path
+from dl_general import OpenAPIDownloader
+import dl_3gpp
+import yaml
+try:
+    from yaml import CLoader as Loader, CDumper as Dumper
+except ImportError:
+    from yaml import Loader, Dumper
+
+"""
+Extract sub-tree with given path
+"""
+def get_node(tree, path):
+  for segment in path.split('/'):
+    if segment == '':
+      continue
+    tree = tree[segment]
+  return tree
+
+"""
+Iterate all of the nodes in the nested dictionary.
+And find the value with key "$ref".
+"""
+def find_refs(tree):
+  refs = []
+
+  if not isinstance(tree, dict):
+    return []
+
+  for k, v in tree.items():
+    if isinstance(v, dict):
+      refs += find_refs(v)
+    elif isinstance(v, list):
+      for _v in v:
+        refs += find_refs(_v)
+    else:
+      if k == "$ref":
+        ref = v.split('#')
+        refs.append({
+          "name": ref[0],
+          "node": ref[1]
+        })
+  return refs
+
+"""
+Parse the given specification file and return the name of dependent specs of given node.
+"""
+def get_dependent_spec(spec_path, node_path):
+  logging.info(f"Parsing dependency of {spec_path}#{node_path}")
+  with open(spec_path, 'r') as f:
+    spec = yaml.load(f, Loader=Loader)
+  
+  ext_deps = []
+  int_deps = [node_path]
+  visited_deps = set()
+
+  while len(int_deps)!=0:
+    int_node_path = int_deps.pop()
+    if int_node_path in visited_deps:
+      continue
+    tree = get_node(spec, int_node_path)
+    deps = find_refs(tree)
+    for dep in deps:
+      if dep['name'] == '':
+        int_deps.append(dep['node'])
+      else:
+        ext_deps.append(dep)
+    visited_deps.add(int_node_path)
+
+  return ext_deps
+
+"""
+Download the given specification and it's dependency to the destination directory
+"""
+def main(dst_dir, target_specs_name, dl):
+  dependent_specs = []
+  visited_deps = set()
+  spec_name = ""
+  desired_node = ""
+  spec_path = ""
+  dst_dir.mkdir(parents=True, exist_ok=True)
+
+  for spec_name in target_specs_name:
+    dependent_specs.append({
+        "name": spec_name,
+        "node": "/"
+        })
+
+  while len(dependent_specs) != 0:
+    spec = dependent_specs.pop()
+    if f"{spec['name']}#{spec['node']}" in visited_deps:
+      continue
+    spec_path = dst_dir / spec['name']
+    if not spec_path.is_file():
+      url = dl.infer_url(spec['name'])
+      dl.dl_spec(dst_dir, spec['name'], url)
+    dependent_specs += get_dependent_spec(spec_path, spec['node'])
+    visited_deps.add(f"{spec['name']}#{spec['node']}")
+
+  logging.info(f"All dependencies of the following specification(s) are successfully downloaded.")
+  for spec_name in target_specs_name:
+    logging.info(f"  {spec_name}")
+  
+
+if __name__ == "__main__":
+
+  logging.basicConfig(
+    stream=sys.stdout,
+    level=logging.INFO,
+    format="[%(levelname)s] %(message)s"
+  )
+  """
+  Parameters
+  """
+  work_dir = Path(".")
+
+  parser = argparse.ArgumentParser(
+      formatter_class=argparse.RawTextHelpFormatter,
+      description='Fetch given OpanAPI specification and all of it\'s dependencies from 3GPP.'
+    )
+  parser.add_argument('spec', metavar='spec', type=str, nargs='+',
+                      help='Filename of desired OpenAPI specification from 3GPP.')
+  parser.add_argument('-o, --output', metavar='output_dir', dest='work_dir', type=Path,
+                      default=Path('.'), action='store',
+                      help='The directory where will the dependent files place.\n'+
+                           '(Default is the current working directory)')
+  parser.add_argument('--dl', metavar='downloader', dest='dl', type=OpenAPIDownloader,
+                      default=dl_3gpp.Downloader3GPP, action='store',
+                      help='The downloader of specification files.\n(Currently only 3GPP is avaliable)')
+  parser.add_argument('--dldir', metavar='download_dir', dest='dl_dir', type=Path,
+                      default=Path("/tmp/openapi_spec/"), action='store',
+                      help='The location to store original specification files.\n(Default is /tmp/openapi_spec/)')
+
+  args = parser.parse_args()
+
+  downloader = args.dl(args.dl_dir)
+  main(args.work_dir, args.spec, downloader)
