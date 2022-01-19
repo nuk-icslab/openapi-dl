@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="openapi-dl",
-    version="0.0.1",
+    version="1.0.0",
     author="Yong-Hsiang Hu",
     author_email="iftnt1999@gmail.com",
     description="Recursively download the OpenAPI specification and it's dependency",
